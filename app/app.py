@@ -1,15 +1,27 @@
 import json
+import logging
 
-# import requests
+try:
+    from app.agents import create_manager_agent
+    from app.crew import create_support_crew
+    from app.tasks import create_support_task
+except ImportError:  # pragma: no cover - flat layout used by the deployed Lambda
+    from agents import create_manager_agent
+    from crew import create_support_crew
+    from tasks import create_support_task
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 
 def lambda_handler(event, context):
-    """Sample pure Lambda function
+    """Customer support agent entry point.
 
     Parameters
     ----------
     event: dict, required
-        API Gateway Lambda Proxy Input Format
+        API Gateway Lambda Proxy Input Format. The JSON body must contain
+        `customer_id` and `message`.
 
         Event doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html#api-gateway-simple-proxy-for-lambda-input-format
 
@@ -25,18 +37,32 @@ def lambda_handler(event, context):
         Return doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html
     """
 
-    # try:
-    #     ip = requests.get("http://checkip.amazonaws.com/")
-    # except requests.RequestException as e:
-    #     # Send some context about this error to Lambda Logs
-    #     print(e)
+    try:
+        body = json.loads(event.get("body") or "{}")
+    except json.JSONDecodeError:
+        return _response(400, {"error": "Request body must be valid JSON"})
 
-    #     raise e
+    customer_id = body.get("customer_id")
+    message = body.get("message")
 
+    if not customer_id or not message:
+        return _response(400, {"error": "Both 'customer_id' and 'message' are required"})
+
+    try:
+        manager_agent = create_manager_agent()
+        support_crew = create_support_crew(manager_agent)
+        support_crew.tasks = [create_support_task(customer_id, message)]
+
+        result = support_crew.kickoff()
+    except Exception as exc:
+        logger.exception("Failed to run support crew")
+        return _response(500, {"error": "Failed to process the support request", "details": str(exc)})
+
+    return _response(200, {"response": str(result)})
+
+
+def _response(status_code: int, payload: dict) -> dict:
     return {
-        "statusCode": 200,
-        "body": json.dumps({
-            "message": "hello world",
-            # "location": ip.text.replace("\n", "")
-        }),
+        "statusCode": status_code,
+        "body": json.dumps(payload),
     }
