@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  python.aws-lambda.crew-ai
+
+  Sample SAM Template for python.aws-lambda.crew-ai
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+    LoggingConfig:
+      LogFormat: JSON
+
+Resources:
+  CrewAiClientApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: crew-ai-api
+      StageName: Prod
+      Auth:
+        ApiKeyRequired: true
+
+  MainFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: app/
+      Handler: app.lambda_handler
+      Runtime: python3.14
+      Architectures:
+      - x86_64
+      Events:
+        Main:
+          Type: Api
+          Properties:
+            Path: /crew-ai
+            Method: post
+
+  ApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    DependsOn:
+      - CrewAiClientApiProdStage
+    Properties:
+      Name: crew-ai-api-key
+      Description: API key required to call the API
+      Enabled: true
+      StageKeys:
+        - RestApiId: !Ref CrewAiClientApi
+          StageName: Prod
+
+  UsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn:
+      - CrewAiClientApiProdStage
+    Properties:
+      UsagePlanName: crew-ai-usage-plan
+      Description: Throttling and quota applied to callers of the API key
+      ApiStages:
+        - ApiId: !Ref CrewAiClientApi
+          Stage: Prod
+      Throttle:
+        RateLimit: 10
+        BurstLimit: 20
+      Quota:
+        Limit: 10000
+        Period: MONTH
+
+  UsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyType: API_KEY
+      KeyId: !Ref ApiKey
+      UsagePlanId: !Ref UsagePlan
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  MainApi:
+    Description: API Gateway endpoint URL for Prod stage for Hello World 
+      function
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/Prod/crew-ai/"
+  MainFunction:
+    Description: Hello World Lambda Function ARN
+    Value: !GetAtt MainFunction.Arn
+  MainFunctionIamRole:
+    Description: Implicit IAM Role created for Hello World function
+    Value: !GetAtt MainFunctionRole.Arn
