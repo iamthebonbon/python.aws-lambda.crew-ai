@@ -3,12 +3,11 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   python.aws-lambda.crew-ai
 
-  Sample SAM Template for python.aws-lambda.crew-ai
-
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
-    Timeout: 3
+    Timeout: 30
+    # You can add LoggingConfig parameters such as the Logformat, Log Group, and SystemLogLevel or ApplicationLogLevel. Learn more here https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html#sam-function-loggingconfig.
     LoggingConfig:
       LogFormat: JSON
 
@@ -21,7 +20,7 @@ Resources:
       Auth:
         ApiKeyRequired: true
 
-  MainFunction:
+  AgentFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: app/
@@ -33,7 +32,8 @@ Resources:
         Main:
           Type: Api
           Properties:
-            Path: /crew-ai
+            RestApiId: !Ref CrewAiClientApi
+            Path: /agent
             Method: post
 
   ApiKey:
@@ -76,13 +76,13 @@ Outputs:
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
   # Find out more about other implicit resources you can reference within SAM
   # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
-  MainApi:
-    Description: API Gateway endpoint URL for Prod stage for Hello World 
+  AgentApi:
+    Description: API Gateway endpoint URL for Prod stage 
       function
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/Prod/crew-ai/"
-  MainFunction:
+    Value: !Sub "https://${CrewAiClientApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/Prod/agent/"
+  AgentFunction:
     Description: Hello World Lambda Function ARN
-    Value: !GetAtt MainFunction.Arn
-  MainFunctionIamRole:
+    Value: !GetAtt AgentFunction.Arn
+  AgentFunctionIamRole:
     Description: Implicit IAM Role created for Hello World function
-    Value: !GetAtt MainFunctionRole.Arn
+    Value: !GetAtt AgentFunctionRole.Arn

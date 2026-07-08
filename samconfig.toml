@@ -3,7 +3,7 @@
 version = 0.1
 
 [default.global.parameters]
-stack_name = "python.aws-lambda.crew-ai"
+stack_name = "crew-ai"
 
 [default.build.parameters]
 cached = true
