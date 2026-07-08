@@ -2,10 +2,39 @@
 
 This project contains source code and supporting files for a serverless application that you can deploy with the SAM CLI. It includes the following files and folders.
 
-- hello_world - Code for the application's Lambda function.
+- app - Code for the application's Lambda function: a CrewAI-powered customer support agent.
 - events - Invocation events that you can use to invoke the function.
 - tests - Unit tests for the application code. 
 - template.yaml - A template that defines the application's AWS resources.
+
+## Customer support agent
+
+The `AgentFunction` Lambda exposes a hierarchical [CrewAI](https://docs.crewai.com/) crew (technical, billing,
+account and escalation specialists coordinated by a manager agent) behind a `POST /agent` endpoint. This is a proof
+of concept: there is no database, all customer, billing and known-issue data used by the agents' tools is hardcoded
+in `app/data.py`.
+
+Request body:
+
+```json
+{
+  "customer_id": "CUST001",
+  "message": "I can't log into my account"
+}
+```
+
+Response body:
+
+```json
+{
+  "response": "..."
+}
+```
+
+The crew calls an LLM to reason and delegate work, so the function needs an API key at runtime. Set it via the
+`OpenAiApiKey` parameter when deploying (`sam deploy --parameter-overrides OpenAiApiKey=<your-key>`), which is
+exposed to the function as the `OPENAI_API_KEY` environment variable. The model used by the agents can be changed
+with the `CrewAiModel` parameter (`CREW_MODEL` environment variable), which defaults to `gpt-4o-mini`.
 
 The application uses several AWS resources, including Lambda functions and an API Gateway API. These resources are defined in the `template.yaml` file in this project. You can update the template to add AWS resources through the same deployment process that updates your application code.
 

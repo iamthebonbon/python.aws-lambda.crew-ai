@@ -1,4 +1,5 @@
 import json
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -10,12 +11,12 @@ def apigw_event():
     """ Generates API GW Event"""
 
     return {
-        "body": '{ "test": "body"}',
-        "resource": "/{proxy+}",
+        "body": json.dumps({"customer_id": "CUST001", "message": "I can't log into my account"}),
+        "resource": "/agent",
         "requestContext": {
             "resourceId": "123456",
             "apiId": "1234567890",
-            "resourcePath": "/{proxy+}",
+            "resourcePath": "/agent",
             "httpMethod": "POST",
             "requestId": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef",
             "accountId": "123456789012",
@@ -34,39 +35,74 @@ def apigw_event():
             },
             "stage": "prod",
         },
-        "queryStringParameters": {"foo": "bar"},
-        "headers": {
-            "Via": "1.1 08f323deadbeefa7af34d5feb414ce27.cloudfront.net (CloudFront)",
-            "Accept-Language": "en-US,en;q=0.8",
-            "CloudFront-Is-Desktop-Viewer": "true",
-            "CloudFront-Is-SmartTV-Viewer": "false",
-            "CloudFront-Is-Mobile-Viewer": "false",
-            "X-Forwarded-For": "127.0.0.1, 127.0.0.2",
-            "CloudFront-Viewer-Country": "US",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Upgrade-Insecure-Requests": "1",
-            "X-Forwarded-Port": "443",
-            "Host": "1234567890.execute-api.us-east-1.amazonaws.com",
-            "X-Forwarded-Proto": "https",
-            "X-Amz-Cf-Id": "aaaaaaaaaae3VYQb9jd-nvCd-de396Uhbp027Y2JvkCPNLmGJHqlaA==",
-            "CloudFront-Is-Tablet-Viewer": "false",
-            "Cache-Control": "max-age=0",
-            "User-Agent": "Custom User Agent String",
-            "CloudFront-Forwarded-Proto": "https",
-            "Accept-Encoding": "gzip, deflate, sdch",
-        },
-        "pathParameters": {"proxy": "/examplepath"},
+        "queryStringParameters": None,
+        "headers": {},
+        "pathParameters": None,
         "httpMethod": "POST",
-        "stageVariables": {"baz": "qux"},
-        "path": "/examplepath",
+        "stageVariables": None,
+        "path": "/agent",
     }
 
 
-def test_lambda_handler(apigw_event):
+def test_lambda_handler_success(apigw_event):
+    fake_crew = MagicMock()
+    fake_crew.kickoff.return_value = "Please clear your browser cache and cookies."
 
-    ret = app.lambda_handler(apigw_event, "")
+    with patch("app.app.create_manager_agent", return_value=MagicMock()) as mock_create_manager, \
+            patch("app.app.create_support_crew", return_value=fake_crew) as mock_create_crew, \
+            patch("app.app.create_support_task", return_value=MagicMock()) as mock_create_task:
+        ret = app.lambda_handler(apigw_event, "")
+
     data = json.loads(ret["body"])
 
     assert ret["statusCode"] == 200
-    assert "message" in ret["body"]
-    assert data["message"] == "hello world"
+    assert data["response"] == "Please clear your browser cache and cookies."
+    mock_create_crew.assert_called_once_with(mock_create_manager.return_value)
+    mock_create_task.assert_called_once_with("CUST001", "I can't log into my account")
+    fake_crew.kickoff.assert_called_once()
+
+
+def test_lambda_handler_missing_customer_id():
+    event = {"body": json.dumps({"message": "I can't log in"})}
+
+    ret = app.lambda_handler(event, "")
+
+    assert ret["statusCode"] == 400
+    assert "error" in json.loads(ret["body"])
+
+
+def test_lambda_handler_missing_message():
+    event = {"body": json.dumps({"customer_id": "CUST001"})}
+
+    ret = app.lambda_handler(event, "")
+
+    assert ret["statusCode"] == 400
+    assert "error" in json.loads(ret["body"])
+
+
+def test_lambda_handler_invalid_json_body():
+    event = {"body": "not-valid-json"}
+
+    ret = app.lambda_handler(event, "")
+
+    assert ret["statusCode"] == 400
+    assert "error" in json.loads(ret["body"])
+
+
+def test_lambda_handler_empty_body():
+    event = {"body": None}
+
+    ret = app.lambda_handler(event, "")
+
+    assert ret["statusCode"] == 400
+    assert "error" in json.loads(ret["body"])
+
+
+def test_lambda_handler_crew_failure(apigw_event):
+    with patch("app.app.create_manager_agent", side_effect=RuntimeError("boom")):
+        ret = app.lambda_handler(apigw_event, "")
+
+    data = json.loads(ret["body"])
+
+    assert ret["statusCode"] == 500
+    assert "error" in data
